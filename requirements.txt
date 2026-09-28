@@ -1,0 +1,9 @@
+python-dotenv
+fastapi
+uvicorn[standard]
+python-multipart
+groq
+supabase
+opencc-python-reimplemented
+pypinyin
+deep-translator
