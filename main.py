@@ -7,15 +7,17 @@ que habla, y regresa, por cada frase:
   - el pinyin (SOLO si el idioma es chino)
   - la traducción al español
 
-No maneja cuentas, límites diarios/mensuales ni pagos — eso viene en la
-siguiente pieza del proyecto. Este archivo es solo el motor de procesamiento,
-pensado para correr como servicio en Render.
+También maneja cuentas (Supabase), límites de uso y suscripciones de PayPal
+(el plan del alumno sube o baja solo cuando paga o cancela). Además entrega
+la página (index.html) en la dirección principal, para que todo viva en un
+solo link de Render.
 
 REQUISITOS (instalar una sola vez):
     pip install -r requirements.txt
 
-VARIABLE DE ENTORNO NECESARIA:
-    GROQ_API_KEY=tu_api_key_de_groq
+VARIABLES DE ENTORNO NECESARIAS (en Render → Environment):
+    GROQ_API_KEY, SUPABASE_URL, SUPABASE_SECRET_KEY,
+    PAYPAL_CLIENT_ID, PAYPAL_SECRET, PAYPAL_WEBHOOK_ID
 
 USO LOCAL (para probar antes de subirlo a Render):
     GROQ_API_KEY=tu_key uvicorn main:app --reload
@@ -30,8 +32,11 @@ from datetime import date
 from dotenv import load_dotenv
 load_dotenv()  # lee el archivo .env y carga las variables de entorno
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+import httpx  # ya viene instalado junto con el paquete de Groq
 
 from groq import Groq
 import opencc
@@ -64,6 +69,18 @@ LIMITES_POR_PLAN = {
     "plan200": 200,
 }
 LIMITE_ANONIMO_DIARIO = 3
+
+# --- PayPal ---------------------------------------------------------------
+PAYPAL_CLIENT_ID = os.environ.get("PAYPAL_CLIENT_ID")
+PAYPAL_SECRET = os.environ.get("PAYPAL_SECRET")
+PAYPAL_WEBHOOK_ID = os.environ.get("PAYPAL_WEBHOOK_ID")
+PAYPAL_API = "https://api-m.paypal.com"  # cobros reales (modo "Live")
+
+# Qué plan de PayPal corresponde a qué plan de la página.
+PLANES_PAYPAL = {
+    "P-8WY28979AD496224KNK4B3BA": "plan100",
+    "P-71D84429K0912891KNK5KALA": "plan200",
+}
 
 
 class LimiteExcedido(Exception):
@@ -349,6 +366,95 @@ def verificar_acceso(autorizacion: str | None, id_anonimo: str | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# PayPal: suscripciones automáticas
+# ---------------------------------------------------------------------------
+
+def _paypal_configurado() -> bool:
+    return bool(PAYPAL_CLIENT_ID and PAYPAL_SECRET)
+
+
+def _token_paypal() -> str:
+    """Pide a PayPal un permiso temporal para poder consultarle cosas."""
+    r = httpx.post(
+        f"{PAYPAL_API}/v1/oauth2/token",
+        auth=(PAYPAL_CLIENT_ID, PAYPAL_SECRET),
+        data={"grant_type": "client_credentials"},
+        timeout=20,
+    )
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def consultar_suscripcion_paypal(id_suscripcion: str) -> dict:
+    """Pregunta directo a PayPal cómo está una suscripción (así nadie puede
+    hacerse pasar por pagado sin haber pagado)."""
+    r = httpx.get(
+        f"{PAYPAL_API}/v1/billing/subscriptions/{id_suscripcion}",
+        headers={"Authorization": f"Bearer {_token_paypal()}"},
+        timeout=20,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def activar_plan(id_usuario: str, id_suscripcion: str, id_plan_paypal: str) -> str | None:
+    """Sube de plan a un usuario. Regresa el plan asignado (o None si el
+    plan de PayPal no es uno de los nuestros)."""
+    plan = PLANES_PAYPAL.get(id_plan_paypal)
+    if not plan or not id_usuario:
+        return None
+    cliente_supabase.table("perfiles").update({
+        "plan": plan,
+        "paypal_subscription_id": id_suscripcion,
+        "suscripcion_activa": True,
+    }).eq("id", id_usuario).execute()
+    logger.info("Plan %s activado para %s (suscripción %s)", plan, id_usuario, id_suscripcion)
+    return plan
+
+
+def desactivar_plan(id_suscripcion: str) -> None:
+    """Regresa a gratis a quien tenga esa suscripción (canceló o dejó de pagar)."""
+    cliente_supabase.table("perfiles").update({
+        "plan": "free",
+        "suscripcion_activa": False,
+    }).eq("paypal_subscription_id", id_suscripcion).execute()
+    logger.info("Suscripción %s desactivada, usuario regresa a gratis", id_suscripcion)
+
+
+def sincronizar_con_paypal(id_suscripcion: str) -> None:
+    """Consulta la suscripción en PayPal y deja el plan del usuario igual a
+    lo que PayPal dice (activa -> plan pagado; cualquier otra cosa -> gratis)."""
+    sub = consultar_suscripcion_paypal(id_suscripcion)
+    if sub.get("status") == "ACTIVE":
+        activar_plan(sub.get("custom_id"), sub["id"], sub.get("plan_id"))
+    elif sub.get("status") in ("CANCELLED", "SUSPENDED", "EXPIRED"):
+        desactivar_plan(sub["id"])
+
+
+def verificar_firma_webhook(request_headers, evento: dict) -> bool:
+    """Le pregunta a PayPal si el aviso que nos llegó de verdad viene de él
+    (y no de alguien que quiere activarse un plan gratis)."""
+    if not PAYPAL_WEBHOOK_ID:
+        return False
+    cuerpo = {
+        "auth_algo": request_headers.get("paypal-auth-algo"),
+        "cert_url": request_headers.get("paypal-cert-url"),
+        "transmission_id": request_headers.get("paypal-transmission-id"),
+        "transmission_sig": request_headers.get("paypal-transmission-sig"),
+        "transmission_time": request_headers.get("paypal-transmission-time"),
+        "webhook_id": PAYPAL_WEBHOOK_ID,
+        "webhook_event": evento,
+    }
+    r = httpx.post(
+        f"{PAYPAL_API}/v1/notifications/verify-webhook-signature",
+        headers={"Authorization": f"Bearer {_token_paypal()}"},
+        json=cuerpo,
+        timeout=20,
+    )
+    return r.status_code == 200 and r.json().get("verification_status") == "SUCCESS"
+
+
+# ---------------------------------------------------------------------------
 # API web (FastAPI)
 # ---------------------------------------------------------------------------
 
@@ -372,7 +478,87 @@ def salud():
         "estado": "ok",
         "groq_configurado": cliente_groq is not None,
         "supabase_configurado": cliente_supabase is not None,
+        "paypal_configurado": _paypal_configurado(),
     }
+
+
+@app.get("/")
+def pagina_principal():
+    """La página que ven los alumnos, en la dirección principal."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+    if not os.path.exists(ruta):
+        raise HTTPException(status_code=404, detail="Falta subir index.html junto a main.py.")
+    return FileResponse(ruta)
+
+
+class ConfirmacionPago(BaseModel):
+    id_suscripcion: str
+
+
+@app.post("/paypal/confirmar")
+def paypal_confirmar(datos: ConfirmacionPago, authorization: str | None = Header(default=None)):
+    """La página llama aquí justo después de que el alumno paga, para que su
+    plan suba al instante (sin esperar el aviso de PayPal)."""
+    if cliente_supabase is None or not _paypal_configurado():
+        raise HTTPException(status_code=500, detail="El servidor no tiene configurado PayPal o Supabase.")
+
+    token = authorization[7:].strip() if authorization and authorization.lower().startswith("bearer ") else None
+    usuario = obtener_usuario_desde_token(token) if token else None
+    if usuario is None:
+        raise HTTPException(status_code=401, detail="Inicia sesión para activar tu plan.")
+
+    try:
+        sub = consultar_suscripcion_paypal(datos.id_suscripcion)
+    except Exception:
+        logger.exception("No se pudo consultar la suscripción en PayPal")
+        raise HTTPException(status_code=502, detail="No pudimos confirmar tu pago con PayPal. Si ya pagaste, tu plan se activará solo en unos minutos.")
+
+    if sub.get("custom_id") != usuario.id:
+        raise HTTPException(status_code=403, detail="Esta suscripción no pertenece a tu cuenta.")
+    if sub.get("status") not in ("ACTIVE", "APPROVED"):
+        raise HTTPException(status_code=400, detail="Tu pago todavía no aparece como activo. Espera unos minutos.")
+
+    plan = activar_plan(usuario.id, sub["id"], sub.get("plan_id"))
+    if not plan:
+        raise HTTPException(status_code=400, detail="Plan de PayPal no reconocido.")
+    return {"ok": True, "plan": plan}
+
+
+@app.post("/paypal/webhook")
+async def paypal_webhook(request: Request):
+    """PayPal avisa aquí cada vez que alguien paga, cancela o deja de pagar."""
+    evento = await request.json()
+
+    try:
+        valido = verificar_firma_webhook(request.headers, evento)
+    except Exception:
+        logger.exception("Error verificando aviso de PayPal")
+        raise HTTPException(status_code=500, detail="No se pudo verificar el aviso.")
+    if not valido:
+        logger.warning("Aviso de PayPal con firma inválida, ignorado")
+        raise HTTPException(status_code=400, detail="Firma inválida.")
+
+    tipo = evento.get("event_type", "")
+    recurso = evento.get("resource", {}) or {}
+    logger.info("Aviso de PayPal: %s", tipo)
+
+    try:
+        if tipo == "BILLING.SUBSCRIPTION.ACTIVATED":
+            activar_plan(recurso.get("custom_id"), recurso.get("id"), recurso.get("plan_id"))
+        elif tipo in ("BILLING.SUBSCRIPTION.CANCELLED",
+                      "BILLING.SUBSCRIPTION.SUSPENDED",
+                      "BILLING.SUBSCRIPTION.EXPIRED"):
+            desactivar_plan(recurso.get("id"))
+        elif tipo == "PAYMENT.SALE.COMPLETED":
+            # Cobro mensual: nos aseguramos de que el plan siga activo.
+            id_sub = recurso.get("billing_agreement_id")
+            if id_sub:
+                sincronizar_con_paypal(id_sub)
+    except Exception:
+        logger.exception("Error aplicando aviso de PayPal")
+        raise HTTPException(status_code=500, detail="Error aplicando el aviso.")
+
+    return {"ok": True}
 
 
 @app.get("/idiomas")
