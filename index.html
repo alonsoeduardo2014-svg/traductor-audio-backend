@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinyin al Instante — Alonso Laoshi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@600;700&family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --rojo: #A31E22;
+    --rojo-oscuro: #7A1216;
+    --dorado: #C9973A;
+    --dorado-claro: #E8C874;
+    --crema: #FBF6EC;
+    --tinta: #2B1B14;
+    --tinta-suave: #5C4A3D;
+    --tarjeta: #FFFFFF;
+    --borde: #E8DCC8;
+    --exito: #2F6B3A;
+    --radio: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--crema);
+    color: var(--tinta);
+    font-family: 'Noto Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+
+  header {
+    background: linear-gradient(180deg, var(--rojo) 0%, var(--rojo-oscuro) 100%);
+    color: #fff;
+    padding: 2.2rem 1.5rem 2.6rem;
+    text-align: center;
+    border-bottom: 6px solid var(--dorado);
+  }
+
+  header h1 {
+    font-family: 'Noto Serif', serif;
+    font-weight: 700;
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    margin: 0 0 0.3rem;
+    letter-spacing: 0.01em;
+  }
+
+  header p {
+    margin: 0;
+    color: var(--dorado-claro);
+    font-size: 1.05rem;
+  }
+
+  /* Celular: todo en una columna (cuenta, pasos, planes).
+     Computadora: pasos a la izquierda (grande), cuenta y planes a la derecha. */
+  main {
+    max-width: 1120px;
+    margin: -1.4rem auto 3rem;
+    padding: 0 1.2rem;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas: "cuenta" "pasos" "planes";
+    column-gap: 1.6rem;
+  }
+  #barraCuenta { grid-area: cuenta; }
+  .columna-pasos { grid-area: pasos; min-width: 0; }
+  #tarjetaPlanes { grid-area: planes; }
+
+  @media (min-width: 900px) {
+    main {
+      grid-template-columns: minmax(0, 1fr) 320px;
+      grid-template-areas: "pasos cuenta" "pasos planes";
+      grid-template-rows: auto 1fr;
+      align-items: start;
+    }
+    #barraCuenta { flex-direction: column; align-items: stretch; text-align: center; }
+    #barraCuenta .boton-cuenta { width: 100%; }
+  }
+
+  .tarjeta {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    box-shadow: 0 6px 20px rgba(122, 18, 22, 0.08);
+    padding: 1.6rem 1.6rem 1.8rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .paso-numero {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    background: var(--rojo);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-right: 0.6rem;
+    flex-shrink: 0;
+  }
+
+  .paso-titulo {
+    display: flex;
+    align-items: center;
+    font-weight: 700;
+    font-size: 1.2rem;
+    margin-bottom: 0.9rem;
+    color: var(--tinta);
+  }
+
+  select {
+    width: 100%;
+    font-size: 1.15rem;
+    padding: 0.85rem 1rem;
+    border: 2px solid var(--borde);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--tinta);
+    font-family: inherit;
+  }
+  select:focus-visible {
+    outline: 3px solid var(--dorado);
+    outline-offset: 1px;
+  }
+
+  .zona-archivo {
+    display: block;
+    border: 2px dashed var(--dorado);
+    border-radius: 10px;
+    padding: 1.6rem 1rem;
+    text-align: center;
+    background: #FFFBF3;
+    cursor: pointer;
+  }
+  .zona-archivo:hover { background: #FFF6E3; }
+  .zona-archivo input[type="file"] { display: none; }
+
+  .boton-elegir {
+    display: inline-block;
+    background: var(--dorado);
+    color: var(--tinta);
+    font-weight: 700;
+    padding: 0.75rem 1.4rem;
+    border-radius: 999px;
+    font-size: 1.05rem;
+  }
+
+  .nombre-archivo {
+    margin-top: 0.7rem;
+    color: var(--tinta-suave);
+    font-size: 1rem;
+    word-break: break-all;
+  }
+
+  .boton-convertir {
+    width: 100%;
+    background: var(--rojo);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    font-size: 1.3rem;
+    font-weight: 700;
+    padding: 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, transform 0.05s ease;
+  }
+  .boton-convertir:hover:not(:disabled) { background: var(--rojo-oscuro); }
+  .boton-convertir:active:not(:disabled) { transform: scale(0.99); }
+  .boton-convertir:disabled {
+    background: #D8C9C9;
+    color: #8a7a7a;
+    cursor: not-allowed;
+  }
+  .boton-convertir:focus-visible { outline: 3px solid var(--dorado); outline-offset: 2px; }
+
+  .bloque-progreso {
+    display: none;
+    text-align: center;
+    padding: 1.6rem;
+  }
+  .bloque-progreso.visible { display: block; }
+
+  .numero-porcentaje {
+    font-family: 'Noto Serif', serif;
+    font-size: 3.4rem;
+    font-weight: 700;
+    color: var(--rojo);
+    line-height: 1;
+  }
+
+  .mensaje-progreso {
+    margin-top: 0.6rem;
+    color: var(--tinta-suave);
+    font-size: 1.05rem;
+  }
+
+  .bloque-error {
+    display: none;
+    background: #FDEDEC;
+    border: 1px solid #E3A6A6;
+    color: var(--rojo-oscuro);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1.4rem;
+    font-size: 1rem;
+  }
+  .bloque-error.visible { display: block; }
+
+  .resultados { display: none; }
+  .resultados.visible { display: block; }
+
+  .fila-resultado {
+    border-top: 1px solid var(--borde);
+    padding: 1rem 0;
+  }
+  .fila-resultado:first-child { border-top: none; }
+
+  .fila-texto {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+  }
+  .fila-pronunciacion {
+    color: var(--rojo);
+    font-size: 1.05rem;
+    margin-bottom: 0.2rem;
+  }
+  .fila-traduccion {
+    color: var(--tinta-suave);
+    font-size: 1.05rem;
+  }
+
+  .boton-secundario {
+    width: 100%;
+    background: transparent;
+    color: var(--rojo);
+    border: 2px solid var(--rojo);
+    border-radius: 999px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 0.8rem;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: 1rem;
+  }
+  .boton-secundario:hover { background: #FDEDEC; }
+
+  footer {
+    text-align: center;
+    color: var(--tinta-suave);
+    font-size: 0.9rem;
+    padding: 1rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .boton-convertir { transition: none; }
+  }
+
+  /* ------------------- Barra de cuenta ------------------- */
+  .barra-cuenta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+  .barra-cuenta-info {
+    font-size: 1rem;
+    color: var(--tinta-suave);
+  }
+  .barra-cuenta-info strong {
+    color: var(--tinta);
+  }
+  .boton-cuenta {
+    background: var(--tinta);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    font-weight: 700;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.95rem;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .boton-cuenta.salir { background: transparent; color: var(--rojo); border: 2px solid var(--rojo); }
+
+  /* ------------------- Modal de acceso ------------------- */
+  .fondo-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(43, 27, 20, 0.55);
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 50;
+  }
+  .fondo-modal.visible { display: flex; }
+
+  .caja-modal {
+    background: #fff;
+    border-radius: var(--radio);
+    max-width: 420px;
+    width: 100%;
+    padding: 1.8rem;
+    position: relative;
+    border-top: 6px solid var(--dorado);
+  }
+
+  .cerrar-modal {
+    position: absolute;
+    top: 0.8rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    color: var(--tinta-suave);
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .pestanas-modal {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.2rem;
+  }
+  .pestana {
+    flex: 1;
+    background: #F3EBDD;
+    border: none;
+    border-radius: 999px;
+    padding: 0.6rem;
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: var(--tinta-suave);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pestana.activa { background: var(--rojo); color: #fff; }
+
+  .campo-modal {
+    margin-bottom: 1rem;
+  }
+  .campo-modal label {
+    display: block;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+    font-size: 0.98rem;
+  }
+  .campo-modal input {
+    width: 100%;
+    font-size: 1.1rem;
+    padding: 0.7rem 0.85rem;
+    border: 2px solid var(--borde);
+    border-radius: 10px;
+    font-family: inherit;
+  }
+  .campo-modal input:focus-visible { outline: 3px solid var(--dorado); outline-offset: 1px; }
+
+  .mensaje-modal {
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+    padding: 0.7rem 0.9rem;
+    border-radius: 8px;
+  }
+  .mensaje-modal.error { background: #FDEDEC; color: var(--rojo-oscuro); }
+  .mensaje-modal.exito { background: #EAF5EC; color: var(--exito); }
+
+  /* ------------------- Planes de pago ------------------- */
+  .tarjeta-planes { padding: 1.2rem 1.2rem 1.3rem; }
+  .tarjeta-planes h2 {
+    font-family: 'Noto Serif', serif;
+    font-size: 1.15rem;
+    margin: 0 0 0.3rem;
+    color: var(--rojo-oscuro);
+  }
+  .tarjeta-planes .subtitulo { color: var(--tinta-suave); font-size: 0.92rem; margin: 0 0 0.9rem; }
+  .lista-planes { display: grid; gap: 0.8rem; grid-template-columns: 1fr; }
+  .plan {
+    border: 2px solid var(--borde);
+    border-radius: 12px;
+    padding: 0.8rem 0.9rem 0.6rem;
+    background: #FFFBF3;
+  }
+  .plan.destacado { border-color: var(--dorado); }
+  .plan-nombre { font-weight: 700; font-size: 1rem; }
+  .plan-precio { font-family: 'Noto Serif', serif; font-size: 1.6rem; font-weight: 700; color: var(--rojo); line-height: 1.2; }
+  .plan-precio span { font-family: 'Noto Sans', sans-serif; font-size: 1rem; color: var(--tinta-suave); font-weight: 400; }
+  .plan-detalle { color: var(--tinta-suave); font-size: 0.92rem; margin: 0.1rem 0 0.7rem; }
+  .plan-boton-paypal { min-height: 50px; }
+  .aviso-plan { background: #EAF5EC; color: var(--exito); border-radius: 10px; padding: 0.8rem 0.9rem; font-size: 0.95rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Pinyin al Instante</h1>
+  <p>por Alonso Laoshi</p>
+</header>
+
+<main>
+
+  <div class="tarjeta barra-cuenta" id="barraCuenta">
+    <div class="barra-cuenta-info" id="infoCuenta">Cargando tu cuenta…</div>
+    <button type="button" class="boton-cuenta" id="botonAccionCuenta">Iniciar sesión / Crear cuenta</button>
+  </div>
+
+
+  <div class="tarjeta tarjeta-planes" id="tarjetaPlanes" style="display: none;">
+    <h2>¿Necesitas más audios?</h2>
+    <p class="subtitulo" id="subtituloPlanes">Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.</p>
+    <div id="contenidoPlanes">
+      <div class="lista-planes">
+        <div class="plan">
+          <div class="plan-nombre">Plan 100</div>
+          <div class="plan-precio">$3 <span>USD al mes</span></div>
+          <div class="plan-detalle">100 audios cada mes</div>
+          <div class="plan-boton-paypal" id="botonPlan100"></div>
+        </div>
+        <div class="plan destacado">
+          <div class="plan-nombre">Plan 200</div>
+          <div class="plan-precio">$6 <span>USD al mes</span></div>
+          <div class="plan-detalle">200 audios cada mes</div>
+          <div class="plan-boton-paypal" id="botonPlan200"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="columna-pasos">
+  <div class="bloque-error" id="bloqueError"></div>
+
+  <form id="formulario">
+    <div class="tarjeta">
+      <div class="paso-titulo"><span class="paso-numero">1</span> Elige el idioma del audio</div>
+      <select id="idioma" name="idioma">
+        <option value="zh" selected>中文 Chino</option>
+        <option value="en">English Inglés</option>
+        <option value="ja">日本語 Japonés</option>
+        <option value="ko">한국어 Coreano</option>
+        <option value="fr">Français Francés</option>
+        <option value="it">Italiano</option>
+        <option value="de">Deutsch Alemán</option>
+      </select>
+    </div>
+
+    <div class="tarjeta">
+      <div class="paso-titulo"><span class="paso-numero">2</span> Sube tu archivo de audio</div>
+      <label class="zona-archivo" id="zonaArchivo">
+        <span class="boton-elegir">Elegir archivo</span>
+        <div class="nombre-archivo" id="nombreArchivo">Ningún archivo elegido todavía</div>
+        <input type="file" id="archivo" name="archivo" accept="audio/*">
+      </label>
+    </div>
+
+    <div class="tarjeta">
+      <div class="paso-titulo"><span class="paso-numero">3</span> Conviértelo</div>
+      <button type="submit" class="boton-convertir" id="botonConvertir" disabled>Convertir audio</button>
+
+      <div class="bloque-progreso" id="bloqueProgreso">
+        <div class="numero-porcentaje" id="numeroPorcentaje">0%</div>
+        <div class="mensaje-progreso" id="mensajeProgreso">Preparando tu audio…</div>
+      </div>
+    </div>
+  </form>
+
+  <div class="tarjeta resultados" id="tarjetaResultados">
+    <div id="listaResultados"></div>
+    <button type="button" class="boton-secundario" id="botonOtro">Convertir otro audio</button>
+  </div>
+  </div>
+
+</main>
+
+<div class="fondo-modal" id="fondoModal">
+  <div class="caja-modal">
+    <button type="button" class="cerrar-modal" id="cerrarModal" aria-label="Cerrar">×</button>
+
+    <div class="pestanas-modal">
+      <button type="button" class="pestana activa" id="pestanaLogin">Ya tengo cuenta</button>
+      <button type="button" class="pestana" id="pestanaRegistro">Crear cuenta</button>
+    </div>
+
+    <div class="mensaje-modal" id="mensajeModal" style="display: none;"></div>
+
+    <form id="formularioAuth">
+      <div class="campo-modal">
+        <label for="campoEmail">Correo</label>
+        <input type="email" id="campoEmail" required autocomplete="email">
+      </div>
+      <div class="campo-modal">
+        <label for="campoPassword">Contraseña</label>
+        <input type="password" id="campoPassword" required autocomplete="current-password" minlength="6">
+      </div>
+      <button type="submit" class="boton-convertir" id="botonEnviarAuth">Iniciar sesión</button>
+    </form>
+  </div>
+</div>
+
+<footer>Aprendiendo Chino con Alonso Laoshi</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // -----------------------------------------------------------------------
+  // Cambia esta línea cuando el backend ya esté en línea (Render). Por ahora
+  // apunta al servidor que corres en tu propia computadora para hacer pruebas.
+  // -----------------------------------------------------------------------
+  const URL_BACKEND = "https://traductor-audio-backend.onrender.com";
+
+  // Estos dos son seguros de tener aquí a la vista (no son secretos) — son
+  // los mismos que copiaste de Supabase → Project Settings → API.
+  const SUPABASE_URL = "https://kbzcgebinhkvsvgsyxdg.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-HeiBwdDYaBsWRK1g0CHvw_IyFj0zzn";
+
+  const supabaseCliente = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+  // PayPal (datos públicos, no son secretos)
+  const PAYPAL_CLIENT_ID = "BAA-WKZEUtRKdA9-hbFJ9HhtX2RjiwZr0NK3askgVr8wrcNob09E02hKQTbhP328KOyFNBPIhP1lNB8_1w";
+  const PLAN_PAYPAL_100 = "P-8WY28979AD496224KNK4B3BA";
+  const PLAN_PAYPAL_200 = "P-71D84429K0912891KNK5KALA";
+
+  const NOMBRES_PLAN = {
+    free: "Cuenta gratis (3 al día)",
+    plan100: "Plan 100 al mes",
+    plan200: "Plan 200 al mes",
+  };
+
+  // ---------------------------------------------------------------------
+  // Identidad: si no hay sesión, cada navegador tiene un código aleatorio
+  // guardado localmente, para que el servidor pueda contar sus 3 gratis al día.
+  // ---------------------------------------------------------------------
+  function obtenerIdAnonimo() {
+    let id = localStorage.getItem("id_anonimo");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("id_anonimo", id);
+    }
+    return id;
+  }
+
+  let sesionActual = null; // null = no ha iniciado sesión
+
+  async function obtenerEncabezadosAcceso() {
+    if (sesionActual) {
+      return { "Authorization": "Bearer " + sesionActual.access_token };
+    }
+    return { "X-Id-Anonimo": obtenerIdAnonimo() };
+  }
+
+  // ---------------------------------------------------------------------
+  // Barra de cuenta (arriba de todo)
+  // ---------------------------------------------------------------------
+  const infoCuenta = document.getElementById("infoCuenta");
+  const botonAccionCuenta = document.getElementById("botonAccionCuenta");
+
+  async function actualizarBarraCuenta() {
+    if (sesionActual) {
+      botonAccionCuenta.textContent = "Cerrar sesión";
+      botonAccionCuenta.classList.add("salir");
+    } else {
+      botonAccionCuenta.textContent = "Iniciar sesión / Crear cuenta";
+      botonAccionCuenta.classList.remove("salir");
+    }
+
+    try {
+      const encabezados = await obtenerEncabezadosAcceso();
+      const respuesta = await fetch(`${URL_BACKEND}/estado`, { headers: encabezados });
+      const datos = await respuesta.json();
+
+      if (datos.tipo === "cuenta") {
+        const nombrePlan = NOMBRES_PLAN[datos.plan] || datos.plan;
+        infoCuenta.innerHTML = `<strong>${datos.email}</strong> · ${nombrePlan} · Llevas ${datos.usados} de ${datos.limite} este mes`;
+      } else {
+        infoCuenta.innerHTML = `Modo invitado · Llevas ${datos.usados} de ${datos.limite} gratis hoy`;
+      }
+      actualizarPlanes(datos);
+    } catch {
+      infoCuenta.textContent = "Modo invitado · 3 gratis al día";
+    }
+  }
+
+  botonAccionCuenta.addEventListener("click", async () => {
+    if (sesionActual) {
+      await supabaseCliente.auth.signOut();
+      sesionActual = null;
+      actualizarBarraCuenta();
+    } else {
+      abrirModal();
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Modal de iniciar sesión / crear cuenta
+  // ---------------------------------------------------------------------
+  const fondoModal = document.getElementById("fondoModal");
+  const cerrarModalBtn = document.getElementById("cerrarModal");
+  const pestanaLogin = document.getElementById("pestanaLogin");
+  const pestanaRegistro = document.getElementById("pestanaRegistro");
+  const formularioAuth = document.getElementById("formularioAuth");
+  const botonEnviarAuth = document.getElementById("botonEnviarAuth");
+  const mensajeModal = document.getElementById("mensajeModal");
+  const campoEmail = document.getElementById("campoEmail");
+  const campoPassword = document.getElementById("campoPassword");
+
+  let modoModal = "login"; // "login" o "registro"
+
+  function abrirModal() {
+    fondoModal.classList.add("visible");
+    mostrarMensajeModal(null);
+  }
+  function cerrarModal() {
+    fondoModal.classList.remove("visible");
+    formularioAuth.reset();
+  }
+  function mostrarMensajeModal(texto, tipo) {
+    if (!texto) {
+      mensajeModal.style.display = "none";
+      return;
+    }
+    mensajeModal.textContent = texto;
+    mensajeModal.className = "mensaje-modal " + (tipo || "error");
+    mensajeModal.style.display = "block";
+  }
+
+  function cambiarModo(modo) {
+    modoModal = modo;
+    mostrarMensajeModal(null);
+    if (modo === "login") {
+      pestanaLogin.classList.add("activa");
+      pestanaRegistro.classList.remove("activa");
+      botonEnviarAuth.textContent = "Iniciar sesión";
+    } else {
+      pestanaRegistro.classList.add("activa");
+      pestanaLogin.classList.remove("activa");
+      botonEnviarAuth.textContent = "Crear cuenta";
+    }
+  }
+
+  cerrarModalBtn.addEventListener("click", cerrarModal);
+  fondoModal.addEventListener("click", (e) => { if (e.target === fondoModal) cerrarModal(); });
+  pestanaLogin.addEventListener("click", () => cambiarModo("login"));
+  pestanaRegistro.addEventListener("click", () => cambiarModo("registro"));
+
+  formularioAuth.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    mostrarMensajeModal(null);
+    botonEnviarAuth.disabled = true;
+
+    const email = campoEmail.value.trim();
+    const password = campoPassword.value;
+
+    try {
+      if (modoModal === "registro") {
+        const { data, error } = await supabaseCliente.auth.signUp({ email, password });
+        if (error) throw error;
+
+        if (data.session) {
+          sesionActual = data.session;
+          cerrarModal();
+          actualizarBarraCuenta();
+        } else {
+          mostrarMensajeModal("Cuenta creada. Revisa tu correo para confirmarla y luego inicia sesión.", "exito");
+        }
+      } else {
+        const { data, error } = await supabaseCliente.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        sesionActual = data.session;
+        cerrarModal();
+        actualizarBarraCuenta();
+      }
+    } catch (error) {
+      mostrarMensajeModal(error.message || "Ocurrió un problema. Intenta de nuevo.", "error");
+    } finally {
+      botonEnviarAuth.disabled = false;
+    }
+  });
+
+
+  // ---------------------------------------------------------------------
+  // Planes de pago con PayPal
+  // - Sin cuenta: se ven los planes y un botón para crear cuenta primero.
+  // - Con cuenta gratis: aparecen los botones de PayPal.
+  // - Ya suscrito: se ve su plan y cómo cancelarlo.
+  // ---------------------------------------------------------------------
+  const tarjetaPlanes = document.getElementById("tarjetaPlanes");
+  const contenidoPlanes = document.getElementById("contenidoPlanes");
+  const subtituloPlanes = document.getElementById("subtituloPlanes");
+  const htmlPlanesOriginal = contenidoPlanes.innerHTML;
+
+  let promesaPaypal = null;
+  function cargarPaypal() {
+    if (!promesaPaypal) {
+      promesaPaypal = new Promise((resolver, rechazar) => {
+        const script = document.createElement("script");
+        script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription&locale=es_MX`;
+        script.onload = () => resolver(window.paypal);
+        script.onerror = () => { promesaPaypal = null; rechazar(new Error("No cargó PayPal")); };
+        document.head.appendChild(script);
+      });
+    }
+    return promesaPaypal;
+  }
+
+  async function confirmarPago(idSuscripcion) {
+    try {
+      const respuesta = await fetch(`${URL_BACKEND}/paypal/confirmar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + sesionActual.access_token,
+        },
+        body: JSON.stringify({ id_suscripcion: idSuscripcion }),
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.detail || "No pudimos confirmar tu pago.");
+      contenidoPlanes.innerHTML = `<div class="aviso-plan">¡Gracias por tu pago! 🎉 Tu plan ya está activo.</div>`;
+    } catch (error) {
+      contenidoPlanes.innerHTML = `<div class="aviso-plan">Recibimos tu pago. Si tu plan no aparece en unos minutos, recarga la página. (${error.message})</div>`;
+    }
+    setTimeout(actualizarBarraCuenta, 1500);
+  }
+
+  async function dibujarBotonesPaypal() {
+    contenidoPlanes.innerHTML = htmlPlanesOriginal;
+    try {
+      const paypal = await cargarPaypal();
+      const opciones = (idPlan) => ({
+        style: { shape: "pill", color: "gold", layout: "vertical", label: "subscribe" },
+        createSubscription: (_datos, acciones) => acciones.subscription.create({
+          plan_id: idPlan,
+          custom_id: sesionActual.user.id,  // así sabemos a qué cuenta subirle el plan
+        }),
+        onApprove: (datos) => confirmarPago(datos.subscriptionID),
+        onError: () => mostrarError("Hubo un problema con PayPal. No se te cobró nada, intenta de nuevo."),
+      });
+      paypal.Buttons(opciones(PLAN_PAYPAL_100)).render("#botonPlan100");
+      paypal.Buttons(opciones(PLAN_PAYPAL_200)).render("#botonPlan200");
+    } catch {
+      contenidoPlanes.innerHTML = `<div class="aviso-plan">No se pudieron cargar los botones de pago. Recarga la página.</div>`;
+    }
+  }
+
+  let estadoPlanesMostrado = null;
+  function actualizarPlanes(datos) {
+    let estado;
+    if (datos.tipo !== "cuenta") estado = "invitado";
+    else if (datos.plan === "free") estado = "gratis";
+    else estado = "suscrito:" + datos.plan;
+
+    if (estado === estadoPlanesMostrado) return;  // no volver a dibujar si no cambió nada
+    estadoPlanesMostrado = estado;
+    tarjetaPlanes.style.display = "block";
+
+    if (estado === "invitado") {
+      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.";
+      contenidoPlanes.innerHTML = htmlPlanesOriginal;
+      ["botonPlan100", "botonPlan200"].forEach((id) => {
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.className = "boton-cuenta";
+        boton.style.width = "100%";
+        boton.textContent = "Crea tu cuenta para suscribirte";
+        boton.addEventListener("click", () => { cambiarModo("registro"); abrirModal(); });
+        document.getElementById(id).appendChild(boton);
+      });
+    } else if (estado === "gratis") {
+      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.";
+      dibujarBotonesPaypal();
+    } else {
+      const nombrePlan = NOMBRES_PLAN[datos.plan] || datos.plan;
+      subtituloPlanes.textContent = "";
+      contenidoPlanes.innerHTML = `<div class="aviso-plan">Tienes el <strong>${nombrePlan}</strong>. ¡Gracias por tu apoyo! Para cancelar, entra a tu PayPal → Configuración → Pagos automáticos.</div>`;
+    }
+  }
+
+  const formulario = document.getElementById("formulario");
+  const inputArchivo = document.getElementById("archivo");
+  const nombreArchivo = document.getElementById("nombreArchivo");
+  const botonConvertir = document.getElementById("botonConvertir");
+  const bloqueProgreso = document.getElementById("bloqueProgreso");
+  const numeroPorcentaje = document.getElementById("numeroPorcentaje");
+  const mensajeProgreso = document.getElementById("mensajeProgreso");
+  const bloqueError = document.getElementById("bloqueError");
+  const tarjetaResultados = document.getElementById("tarjetaResultados");
+  const listaResultados = document.getElementById("listaResultados");
+  const botonOtro = document.getElementById("botonOtro");
+
+  inputArchivo.addEventListener("change", () => {
+    if (inputArchivo.files.length > 0) {
+      nombreArchivo.textContent = inputArchivo.files[0].name;
+      botonConvertir.disabled = false;
+    } else {
+      nombreArchivo.textContent = "Ningún archivo elegido todavía";
+      botonConvertir.disabled = true;
+    }
+  });
+
+  function mostrarError(texto) {
+    bloqueError.textContent = texto;
+    bloqueError.classList.add("visible");
+  }
+
+  function ocultarError() {
+    bloqueError.classList.remove("visible");
+  }
+
+  // El backend hoy regresa el resultado completo hasta que termina todo (no
+  // manda avance en tiempo real), así que este número es un ESTIMADO que va
+  // subiendo solo mientras esperamos la respuesta, para que se sienta vivo
+  // en vez de una pantalla congelada. Cuando la respuesta real llega, salta a 100%.
+  let intervaloProgreso = null;
+
+  function iniciarProgresoEstimado() {
+    let porcentaje = 0;
+    numeroPorcentaje.textContent = "0%";
+    mensajeProgreso.textContent = "Escuchando tu audio…";
+    bloqueProgreso.classList.add("visible");
+
+    intervaloProgreso = setInterval(() => {
+      // Sube rápido al inicio y se frena cerca del final, para no prometer
+      // un tiempo exacto que no conocemos.
+      const paso = porcentaje < 60 ? 4 : porcentaje < 85 ? 1.5 : 0.4;
+      porcentaje = Math.min(porcentaje + paso, 92);
+      numeroPorcentaje.textContent = Math.round(porcentaje) + "%";
+      if (porcentaje > 40) mensajeProgreso.textContent = "Generando pinyin y traducción…";
+    }, 350);
+  }
+
+  function terminarProgresoEstimado() {
+    clearInterval(intervaloProgreso);
+    numeroPorcentaje.textContent = "100%";
+    mensajeProgreso.textContent = "¡Listo!";
+  }
+
+  function mostrarResultados(datos) {
+    listaResultados.innerHTML = "";
+    datos.resultados.forEach((fila) => {
+      const div = document.createElement("div");
+      div.className = "fila-resultado";
+
+      const textoDiv = document.createElement("div");
+      textoDiv.className = "fila-texto";
+      textoDiv.textContent = fila.texto;
+      div.appendChild(textoDiv);
+
+      if (fila.pronunciacion) {
+        const pronDiv = document.createElement("div");
+        pronDiv.className = "fila-pronunciacion";
+        pronDiv.textContent = fila.pronunciacion;
+        div.appendChild(pronDiv);
+      }
+
+      const tradDiv = document.createElement("div");
+      tradDiv.className = "fila-traduccion";
+      tradDiv.textContent = fila.traduccion;
+      div.appendChild(tradDiv);
+
+      listaResultados.appendChild(div);
+    });
+
+    tarjetaResultados.classList.add("visible");
+    tarjetaResultados.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  formulario.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    ocultarError();
+    tarjetaResultados.classList.remove("visible");
+
+    const archivo = inputArchivo.files[0];
+    if (!archivo) return;
+
+    const idioma = document.getElementById("idioma").value;
+
+    botonConvertir.disabled = true;
+    iniciarProgresoEstimado();
+
+    const datosFormulario = new FormData();
+    datosFormulario.append("archivo", archivo);
+    datosFormulario.append("idioma", idioma);
+
+    try {
+      const encabezados = await obtenerEncabezadosAcceso();
+      const respuesta = await fetch(`${URL_BACKEND}/procesar`, {
+        method: "POST",
+        headers: encabezados,
+        body: datosFormulario,
+      });
+
+      if (!respuesta.ok) {
+        const cuerpoError = await respuesta.json().catch(() => null);
+        let detalle = cuerpoError && cuerpoError.detail ? cuerpoError.detail : "Ocurrió un problema al procesar tu audio.";
+        if (respuesta.status === 429) {
+          clearInterval(intervaloProgreso);
+          bloqueProgreso.classList.remove("visible");
+          mostrarError(detalle);
+          if (!sesionActual) abrirModal();
+          return;
+        }
+        throw new Error(detalle);
+      }
+
+      const datos = await respuesta.json();
+      terminarProgresoEstimado();
+      setTimeout(() => {
+        bloqueProgreso.classList.remove("visible");
+        mostrarResultados(datos);
+        actualizarBarraCuenta();
+      }, 500);
+
+    } catch (error) {
+      clearInterval(intervaloProgreso);
+      bloqueProgreso.classList.remove("visible");
+      mostrarError(error.message || "No se pudo conectar con el servidor. Intenta de nuevo.");
+    } finally {
+      botonConvertir.disabled = false;
+    }
+  });
+
+  botonOtro.addEventListener("click", () => {
+    formulario.reset();
+    inputArchivo.value = "";
+    nombreArchivo.textContent = "Ningún archivo elegido todavía";
+    botonConvertir.disabled = true;
+    tarjetaResultados.classList.remove("visible");
+    ocultarError();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // ---------------------------------------------------------------------
+  // Arranque: si el navegador ya tenía una sesión guardada (visita anterior),
+  // Supabase la recupera sola aquí. Mantenemos todo sincronizado si el login
+  // cambia en otra pestaña también.
+  // ---------------------------------------------------------------------
+  supabaseCliente.auth.onAuthStateChange((_evento, sesion) => {
+    sesionActual = sesion;
+    actualizarBarraCuenta();
+  });
+
+  (async () => {
+    const { data } = await supabaseCliente.auth.getSession();
+    sesionActual = data.session;
+    actualizarBarraCuenta();
+  })();
+</script>
+
+</body>
+</html>
