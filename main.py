@@ -1,4 +1,4 @@
-
+"""
 Motor de Transcripción + Pinyin + Traducción — Backend
 =======================================================
 Este es el "cerebro" del proyecto: recibe un archivo de audio + el idioma
