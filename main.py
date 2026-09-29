@@ -1,4 +1,4 @@
-"""
+
 Motor de Transcripción + Pinyin + Traducción — Backend
 =======================================================
 Este es el "cerebro" del proyecto: recibe un archivo de audio + el idioma
@@ -251,9 +251,10 @@ def obtener_o_crear_perfil(id_usuario: str, email: str | None) -> dict:
     return perfil
 
 
-def verificar_y_registrar_uso_autenticado(perfil: dict):
+def verificar_y_registrar_uso_autenticado(perfil: dict) -> int:
     """Revisa que a este usuario no se le hayan acabado sus audios del mes,
-    y si tiene espacio, le suma uno al contador."""
+    y si tiene espacio, le suma uno al contador. Regresa cuántos lleva
+    usados YA CONTANDO este audio."""
     plan = perfil.get("plan") or "free"
     limite = LIMITES_POR_PLAN.get(plan, LIMITES_POR_PLAN["free"])
     usados = perfil.get("audios_usados_mes") or 0
@@ -265,11 +266,13 @@ def verificar_y_registrar_uso_autenticado(perfil: dict):
         )
 
     cliente_supabase.table("perfiles").update({"audios_usados_mes": usados + 1}).eq("id", perfil["id"]).execute()
+    return usados + 1
 
 
-def verificar_y_registrar_uso_anonimo(id_anonimo: str):
+def verificar_y_registrar_uso_anonimo(id_anonimo: str) -> int:
     """Igual que la de arriba, pero para alguien sin cuenta: 3 al día,
-    contados por el código aleatorio que genera su navegador."""
+    contados por el código aleatorio que genera su navegador. Regresa
+    cuántos lleva usados HOY, ya contando este audio."""
     hoy = date.today().isoformat()
     resp = (
         cliente_supabase.table("usos_anonimos")
@@ -288,24 +291,29 @@ def verificar_y_registrar_uso_anonimo(id_anonimo: str):
                 f"Ya usaste tus {LIMITE_ANONIMO_DIARIO} audios gratis de hoy. "
                 "Crea una cuenta gratis y suscríbete para tener muchos más al mes."
             )
+        nueva_cantidad = fila["cantidad"] + 1
         (
             cliente_supabase.table("usos_anonimos")
-            .update({"cantidad": fila["cantidad"] + 1})
+            .update({"cantidad": nueva_cantidad})
             .eq("id_anonimo", id_anonimo)
             .eq("fecha", hoy)
             .execute()
         )
     else:
+        nueva_cantidad = 1
         cliente_supabase.table("usos_anonimos").insert(
             {"id_anonimo": id_anonimo, "fecha": hoy, "cantidad": 1}
         ).execute()
+
+    return nueva_cantidad
 
 
 def verificar_acceso(autorizacion: str | None, id_anonimo: str | None) -> dict:
     """Punto único de control antes de procesar cualquier audio:
     - Si viene un token válido -> ruta de usuario con cuenta (checa su plan).
     - Si no -> ruta anónima (checa el límite de 3 al día por navegador).
-    Regresa info de a quién se le cobró el uso, para el mensaje de respuesta.
+    Regresa info de a quién se le cobró el uso y cuánto lleva, para que la
+    página pueda mostrar algo como "te quedan 97 de 100 este mes".
     """
     if cliente_supabase is None:
         raise RuntimeError(
@@ -320,8 +328,15 @@ def verificar_acceso(autorizacion: str | None, id_anonimo: str | None) -> dict:
         usuario = obtener_usuario_desde_token(token)
         if usuario is not None:
             perfil = obtener_o_crear_perfil(usuario.id, usuario.email)
-            verificar_y_registrar_uso_autenticado(perfil)
-            return {"tipo": "cuenta", "email": usuario.email, "plan": perfil.get("plan") or "free"}
+            plan = perfil.get("plan") or "free"
+            usados = verificar_y_registrar_uso_autenticado(perfil)
+            return {
+                "tipo": "cuenta",
+                "email": usuario.email,
+                "plan": plan,
+                "usados": usados,
+                "limite": LIMITES_POR_PLAN.get(plan, LIMITES_POR_PLAN["free"]),
+            }
 
     if not id_anonimo:
         raise HTTPException(
@@ -329,8 +344,8 @@ def verificar_acceso(autorizacion: str | None, id_anonimo: str | None) -> dict:
             detail="Falta identificar el navegador (encabezado X-Id-Anonimo) para contar tus audios gratis.",
         )
 
-    verificar_y_registrar_uso_anonimo(id_anonimo)
-    return {"tipo": "anonimo"}
+    usados_hoy = verificar_y_registrar_uso_anonimo(id_anonimo)
+    return {"tipo": "anonimo", "usados": usados_hoy, "limite": LIMITE_ANONIMO_DIARIO}
 
 
 # ---------------------------------------------------------------------------
@@ -365,6 +380,50 @@ def listar_idiomas():
     """Idiomas que la app puede procesar, en el orden en que deben aparecer
     en el selector (chino primero, como idioma insignia)."""
     return [{"codigo": codigo, "nombre": nombre} for codigo, nombre in IDIOMAS_SOPORTADOS.items()]
+
+
+@app.get("/estado")
+def estado(
+    authorization: str | None = Header(default=None),
+    x_id_anonimo: str | None = Header(default=None),
+):
+    """Para que la página consulte el plan y cuántos audios lleva alguien,
+    SIN gastarle ninguno (a diferencia de /procesar, este no suma al contador)."""
+    if cliente_supabase is None:
+        raise HTTPException(status_code=500, detail="El servidor no tiene configurado Supabase.")
+
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+
+    if token:
+        usuario = obtener_usuario_desde_token(token)
+        if usuario is not None:
+            perfil = obtener_o_crear_perfil(usuario.id, usuario.email)
+            plan = perfil.get("plan") or "free"
+            return {
+                "tipo": "cuenta",
+                "email": usuario.email,
+                "plan": plan,
+                "usados": perfil.get("audios_usados_mes") or 0,
+                "limite": LIMITES_POR_PLAN.get(plan, LIMITES_POR_PLAN["free"]),
+            }
+
+    if not x_id_anonimo:
+        return {"tipo": "anonimo", "usados": 0, "limite": LIMITE_ANONIMO_DIARIO}
+
+    hoy = date.today().isoformat()
+    resp = (
+        cliente_supabase.table("usos_anonimos")
+        .select("*")
+        .eq("id_anonimo", x_id_anonimo)
+        .eq("fecha", hoy)
+        .limit(1)
+        .execute()
+    )
+    filas = resp.data
+    usados = filas[0]["cantidad"] if filas else 0
+    return {"tipo": "anonimo", "usados": usados, "limite": LIMITE_ANONIMO_DIARIO}
 
 
 @app.post("/procesar")
