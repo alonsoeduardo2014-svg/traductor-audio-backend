@@ -230,6 +230,16 @@ def _mes_actual() -> str:
     return date.today().strftime("%Y-%m")
 
 
+def _periodo_actual(plan: str | None) -> str:
+    """Cada cuánto se reinicia el contador de audios, según el plan:
+    - Cuenta gratis: cada DÍA (3 al día)  -> regresa algo como "2026-10-08"
+    - Planes de pago: cada MES            -> regresa algo como "2026-10"
+    Se guarda en la misma columna 'mes_actual' de la tabla 'perfiles'."""
+    if (plan or "free") == "free":
+        return date.today().isoformat()
+    return _mes_actual()
+
+
 def obtener_usuario_desde_token(token: str):
     """Verifica el token que manda el navegador (JWT de sesión de Supabase).
     Regresa el objeto de usuario (con .id y .email) si es válido, o None si
@@ -245,7 +255,8 @@ def obtener_usuario_desde_token(token: str):
 
 def obtener_o_crear_perfil(id_usuario: str, email: str | None) -> dict:
     """Trae la fila de 'perfiles' de este usuario (el trigger de Supabase ya
-    la crea sola al registrarse), y le reinicia el contador si ya cambió de mes."""
+    la crea sola al registrarse), y le reinicia el contador cuando toca:
+    cada día si es cuenta gratis, cada mes si tiene plan de pago."""
     resp = cliente_supabase.table("perfiles").select("*").eq("id", id_usuario).limit(1).execute()
     filas = resp.data
 
@@ -256,10 +267,11 @@ def obtener_o_crear_perfil(id_usuario: str, email: str | None) -> dict:
         insertado = cliente_supabase.table("perfiles").insert({"id": id_usuario, "email": email}).execute()
         perfil = insertado.data[0]
 
-    if perfil.get("mes_actual") != _mes_actual():
+    periodo = _periodo_actual(perfil.get("plan"))
+    if perfil.get("mes_actual") != periodo:
         actualizado = (
             cliente_supabase.table("perfiles")
-            .update({"audios_usados_mes": 0, "mes_actual": _mes_actual()})
+            .update({"audios_usados_mes": 0, "mes_actual": periodo})
             .eq("id", id_usuario)
             .execute()
         )
@@ -269,14 +281,19 @@ def obtener_o_crear_perfil(id_usuario: str, email: str | None) -> dict:
 
 
 def verificar_y_registrar_uso_autenticado(perfil: dict) -> int:
-    """Revisa que a este usuario no se le hayan acabado sus audios del mes,
-    y si tiene espacio, le suma uno al contador. Regresa cuántos lleva
-    usados YA CONTANDO este audio."""
+    """Revisa que a este usuario no se le hayan acabado sus audios (del día
+    si es cuenta gratis, del mes si tiene plan de pago), y si tiene espacio,
+    le suma uno al contador. Regresa cuántos lleva usados YA CONTANDO este audio."""
     plan = perfil.get("plan") or "free"
     limite = LIMITES_POR_PLAN.get(plan, LIMITES_POR_PLAN["free"])
     usados = perfil.get("audios_usados_mes") or 0
 
     if usados >= limite:
+        if plan == "free":
+            raise LimiteExcedido(
+                f"Ya usaste tus {limite} audios gratis de hoy. "
+                "Vuelve mañana o suscríbete a un plan para tener muchos más al mes."
+            )
         raise LimiteExcedido(
             f"Ya usaste tus {limite} audios de este mes con tu plan actual. "
             "Espera al siguiente mes o mejora tu plan para seguir traduciendo."
