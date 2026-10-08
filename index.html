@@ -584,7 +584,9 @@
 
       if (datos.tipo === "cuenta") {
         const nombrePlan = NOMBRES_PLAN[datos.plan] || datos.plan;
-        infoCuenta.innerHTML = `<strong>${datos.email}</strong> · ${nombrePlan} · Llevas ${datos.usados} de ${datos.limite} este mes`;
+        // La cuenta gratis se cuenta por día; los planes de pago, por mes.
+        const periodo = datos.plan === "free" ? "hoy" : "este mes";
+        infoCuenta.innerHTML = `<strong>${datos.email}</strong> · ${nombrePlan} · Llevas ${datos.usados} de ${datos.limite} ${periodo}`;
       } else {
         infoCuenta.innerHTML = `Modo invitado · Llevas ${datos.usados} de ${datos.limite} gratis hoy`;
       }
