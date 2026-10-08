@@ -851,6 +851,16 @@
 
   function mostrarResultados(datos) {
     listaResultados.innerHTML = "";
+
+    // Si el servidor manda un aviso (por ejemplo, que la traducción no estuvo
+    // disponible y el audio no se descontó), se muestra arriba de los resultados.
+    if (datos.aviso) {
+      const avisoDiv = document.createElement("div");
+      avisoDiv.className = "bloque-error visible";
+      avisoDiv.textContent = datos.aviso;
+      listaResultados.appendChild(avisoDiv);
+    }
+
     datos.resultados.forEach((fila) => {
       const div = document.createElement("div");
       div.className = "fila-resultado";
