@@ -403,6 +403,25 @@
   .plan-detalle { color: var(--tinta-suave); font-size: 0.92rem; margin: 0.1rem 0 0.7rem; }
   .plan-boton-paypal { min-height: 50px; }
   .aviso-plan { background: #EAF5EC; color: var(--exito); border-radius: 10px; padding: 0.8rem 0.9rem; font-size: 0.95rem; }
+  .aviso-plan.cancelada { background: #FFF6E3; color: var(--tinta); border: 1px solid var(--dorado-claro); }
+  .texto-suscripcion { font-size: 0.95rem; color: var(--tinta-suave); margin: 0.8rem 0 0.2rem; }
+  .boton-cancelar-sus {
+    background: none; border: none; padding: 0.4rem 0; margin-top: 0.3rem;
+    color: var(--rojo); font-weight: 700; font-size: 0.95rem; text-decoration: underline;
+    cursor: pointer; font-family: inherit;
+  }
+  .caja-confirmar {
+    margin-top: 0.6rem; padding: 0.8rem 0.9rem; border-radius: 10px;
+    background: #FDEDEC; border: 1px solid #E3A6A6; font-size: 0.95rem;
+  }
+  .fila-confirmar { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
+  .fila-confirmar button {
+    flex: 1; min-width: 120px; border-radius: 999px; padding: 0.6rem 0.8rem;
+    font-weight: 700; font-size: 0.92rem; cursor: pointer; font-family: inherit;
+  }
+  .boton-no { background: #fff; color: var(--tinta); border: 2px solid var(--borde); }
+  .boton-si { background: var(--rojo); color: #fff; border: 2px solid var(--rojo); }
+  .fila-confirmar button:disabled { opacity: 0.6; cursor: wait; }
 </style>
 </head>
 <body>
@@ -422,8 +441,8 @@
 
 
   <div class="tarjeta tarjeta-planes" id="tarjetaPlanes" style="display: none;">
-    <h2>¿Necesitas más audios?</h2>
-    <p class="subtitulo" id="subtituloPlanes">Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.</p>
+    <h2 id="tituloPlanes">¿Necesitas más audios?</h2>
+    <p class="subtitulo" id="subtituloPlanes">Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.</p>
     <div id="contenidoPlanes">
       <div class="lista-planes">
         <div class="plan">
@@ -757,19 +776,89 @@
     }
   }
 
+  function fechaBonita(texto) {
+    if (!texto) return "";
+    try {
+      return new Date(texto).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+    } catch { return ""; }
+  }
+
+  // Cancela directo en PayPal (sirve aunque haya pagado con tarjeta).
+  async function cancelarSuscripcion(botonSi, cajaMensaje) {
+    botonSi.disabled = true;
+    botonSi.textContent = "Cancelando…";
+    try {
+      const respuesta = await fetch(`${URL_BACKEND}/cancelar`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + sesionActual.access_token },
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos.detail || "No pudimos cancelar. Intenta de nuevo.");
+      estadoPlanesMostrado = null;   // para que se vuelva a dibujar con la fecha
+      await actualizarBarraCuenta();
+    } catch (error) {
+      cajaMensaje.textContent = error.message;
+      botonSi.disabled = false;
+      botonSi.textContent = "Sí, cancelar";
+    }
+  }
+
+  function dibujarSuscrito(datos) {
+    const nombrePlan = NOMBRES_PLAN[datos.plan] || datos.plan;
+    const sus = datos.suscripcion || {};
+    const fecha = fechaBonita(sus.hasta);
+    subtituloPlanes.textContent = "";
+
+    if (sus.estado === "cancelada") {
+      contenidoPlanes.innerHTML =
+        `<div class="aviso-plan cancelada">Tu suscripción al <strong>${nombrePlan}</strong> está <strong>cancelada</strong>: ya no se te va a cobrar.<br>` +
+        (fecha
+          ? `Puedes seguir usando la versión completa hasta el <strong>${fecha}</strong>.`
+          : `Puedes seguir usando la versión completa hasta que termine el mes que pagaste.`) +
+        ` Después tu cuenta regresa sola a la versión gratis.</div>`;
+      return;
+    }
+
+    contenidoPlanes.innerHTML =
+      `<div class="aviso-plan">Tienes el <strong>${nombrePlan}</strong>. ¡Gracias por tu apoyo!</div>` +
+      `<p class="texto-suscripcion">Tu suscripción está activa.` + (fecha ? ` Próximo cobro: <strong>${fecha}</strong>.` : "") + `</p>` +
+      `<button type="button" class="boton-cancelar-sus" id="botonCancelarSus">Cancelar mi suscripción</button>` +
+      `<div class="caja-confirmar" id="cajaConfirmar" hidden>` +
+        `<strong>¿Seguro que quieres cancelar?</strong> Ya no se te cobrará, y conservas la versión completa` +
+        (fecha ? ` hasta el ${fecha}.` : ` hasta que termine el mes que pagaste.`) +
+        `<div id="mensajeCancelar" style="color: var(--rojo-oscuro); margin-top: 0.4rem;"></div>` +
+        `<div class="fila-confirmar">` +
+          `<button type="button" class="boton-no" id="botonNoCancelar">No, seguir suscrito</button>` +
+          `<button type="button" class="boton-si" id="botonSiCancelar">Sí, cancelar</button>` +
+        `</div>` +
+      `</div>`;
+
+    const botonCancelar = document.getElementById("botonCancelarSus");
+    const caja = document.getElementById("cajaConfirmar");
+    botonCancelar.addEventListener("click", () => { caja.hidden = false; botonCancelar.hidden = true; });
+    document.getElementById("botonNoCancelar").addEventListener("click", () => { caja.hidden = true; botonCancelar.hidden = false; });
+    document.getElementById("botonSiCancelar").addEventListener("click", (e) =>
+      cancelarSuscripcion(e.currentTarget, document.getElementById("mensajeCancelar")));
+  }
+
   let estadoPlanesMostrado = null;
   function actualizarPlanes(datos) {
     let estado;
     if (datos.tipo !== "cuenta") estado = "invitado";
     else if (datos.plan === "free") estado = "gratis";
-    else estado = "suscrito:" + datos.plan;
+    else {
+      const sus = datos.suscripcion || {};
+      estado = "suscrito:" + datos.plan + ":" + (sus.estado || "") + ":" + (sus.hasta || "");
+    }
 
     if (estado === estadoPlanesMostrado) return;  // no volver a dibujar si no cambió nada
     estadoPlanesMostrado = estado;
     tarjetaPlanes.style.display = "block";
+    document.getElementById("tituloPlanes").textContent =
+      estado.startsWith("suscrito") ? "Tu suscripción" : "¿Necesitas más audios?";
 
     if (estado === "invitado") {
-      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.";
+      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
       contenidoPlanes.innerHTML = htmlPlanesOriginal;
       ["botonPlan100", "botonPlan200"].forEach((id) => {
         const boton = document.createElement("button");
@@ -781,12 +870,10 @@
         document.getElementById(id).appendChild(boton);
       });
     } else if (estado === "gratis") {
-      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras.";
+      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
       dibujarBotonesPaypal();
     } else {
-      const nombrePlan = NOMBRES_PLAN[datos.plan] || datos.plan;
-      subtituloPlanes.textContent = "";
-      contenidoPlanes.innerHTML = `<div class="aviso-plan">Tienes el <strong>${nombrePlan}</strong>. ¡Gracias por tu apoyo! Para cancelar, entra a tu PayPal → Configuración → Pagos automáticos.</div>`;
+      dibujarSuscrito(datos);
     }
   }
 
