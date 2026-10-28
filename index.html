@@ -297,6 +297,8 @@
     white-space: nowrap;
   }
   .boton-cuenta.salir { background: transparent; color: var(--rojo); border: 2px solid var(--rojo); }
+  .boton-cuenta.desbloquear { background: var(--dorado); color: var(--tinta); }
+  .boton-cuenta[hidden] { display: none; }
 
   /* ------------------- Modal de acceso ------------------- */
   .fondo-modal {
@@ -436,6 +438,7 @@
 
   <div class="tarjeta barra-cuenta" id="barraCuenta">
     <div class="barra-cuenta-info" id="infoCuenta">Cargando tu cuenta…</div>
+    <button type="button" class="boton-cuenta desbloquear" id="botonDesbloquear" hidden>⭐ Desbloquear todo</button>
     <button type="button" class="boton-cuenta" id="botonAccionCuenta">Iniciar sesión / Crear cuenta</button>
   </div>
 
@@ -848,6 +851,20 @@
       cancelarSuscripcion(e.currentTarget, document.getElementById("mensajeCancelar")));
   }
 
+  // Los planes no se muestran de entrada: primero se prueba gratis.
+  // Aparecen cuando la persona toca "Desbloquear todo", cuando se le acaban
+  // sus audios gratis, o si ya está suscrita (para ver su fecha y poder cancelar).
+  let planesPedidos = false;
+  const botonDesbloquear = document.getElementById("botonDesbloquear");
+  function mostrarPlanes() {
+    planesPedidos = true;
+    estadoPlanesMostrado = null;
+    actualizarBarraCuenta().then(() => {
+      tarjetaPlanes.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+  botonDesbloquear.addEventListener("click", mostrarPlanes);
+
   let estadoPlanesMostrado = null;
   function actualizarPlanes(datos) {
     let estado;
@@ -856,6 +873,15 @@
     else {
       const sus = datos.suscripcion || {};
       estado = "suscrito:" + datos.plan + ":" + (sus.estado || "") + ":" + (sus.hasta || "");
+    }
+
+    const suscrito = estado.startsWith("suscrito");
+    botonDesbloquear.hidden = suscrito;
+    const seAcabaron = (datos.usados || 0) >= (datos.limite || 3);
+    if (!suscrito && !planesPedidos && !seAcabaron) {
+      tarjetaPlanes.style.display = "none";
+      estadoPlanesMostrado = null;
+      return;
     }
 
     if (estado === estadoPlanesMostrado) return;  // no volver a dibujar si no cambió nada
@@ -1015,7 +1041,11 @@
           clearInterval(intervaloProgreso);
           bloqueProgreso.classList.remove("visible");
           mostrarError(detalle);
+          planesPedidos = true;
+          estadoPlanesMostrado = null;
+          await actualizarBarraCuenta();
           if (!sesionActual) abrirModal();
+          else tarjetaPlanes.scrollIntoView({ behavior: "smooth", block: "start" });
           return;
         }
         throw new Error(detalle);
