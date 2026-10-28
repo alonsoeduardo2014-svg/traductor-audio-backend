@@ -441,20 +441,20 @@
 
 
   <div class="tarjeta tarjeta-planes" id="tarjetaPlanes" style="display: none;">
-    <h2 id="tituloPlanes">¿Necesitas más audios?</h2>
-    <p class="subtitulo" id="subtituloPlanes">Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.</p>
+    <h2 id="tituloPlanes">Desbloquea todas las aplicaciones</h2>
+    <p class="subtitulo" id="subtituloPlanes"></p>
     <div id="contenidoPlanes">
       <div class="lista-planes">
-        <div class="plan">
-          <div class="plan-nombre">Plan 100</div>
-          <div class="plan-precio">$3 <span>USD al mes</span></div>
-          <div class="plan-detalle">100 audios cada mes</div>
+        <div class="plan destacado">
+          <div class="plan-nombre">Acceso Total</div>
+          <div class="plan-precio">$4 <span>USD al mes</span></div>
+          <div class="plan-detalle">Todas las apps + 100 audios al mes</div>
           <div class="plan-boton-paypal" id="botonPlan100"></div>
         </div>
-        <div class="plan destacado">
-          <div class="plan-nombre">Plan 200</div>
+        <div class="plan">
+          <div class="plan-nombre">Acceso Total Plus</div>
           <div class="plan-precio">$6 <span>USD al mes</span></div>
-          <div class="plan-detalle">200 audios cada mes</div>
+          <div class="plan-detalle">Todas las apps + 200 audios al mes</div>
           <div class="plan-boton-paypal" id="botonPlan200"></div>
         </div>
       </div>
@@ -550,13 +550,19 @@
 
   // PayPal (datos públicos, no son secretos)
   const PAYPAL_CLIENT_ID = "BAA-WKZEUtRKdA9-hbFJ9HhtX2RjiwZr0NK3askgVr8wrcNob09E02hKQTbhP328KOyFNBPIhP1lNB8_1w";
-  const PLAN_PAYPAL_100 = "P-8WY28979AD496224KNK4B3BA";
-  const PLAN_PAYPAL_200 = "P-71D84429K0912891KNK5KALA";
+  // Los planes del Acceso Total se piden al servidor (Render → Environment: PLAN_TOTAL y PLAN_PLUS).
+  let PLANES = null;
+  async function obtenerPlanes() {
+    if (PLANES) return PLANES;
+    const r = await fetch(`${URL_BACKEND}/planes`);
+    PLANES = await r.json();
+    return PLANES;
+  }
 
   const NOMBRES_PLAN = {
     free: "Cuenta gratis (3 al día)",
-    plan100: "Plan 100 al mes",
-    plan200: "Plan 200 al mes",
+    plan100: "Acceso Total (100 audios al mes)",
+    plan200: "Acceso Total Plus (200 audios al mes)",
   };
 
   // ---------------------------------------------------------------------
@@ -749,7 +755,7 @@
       });
       const datos = await respuesta.json().catch(() => ({}));
       if (!respuesta.ok) throw new Error(datos.detail || "No pudimos confirmar tu pago.");
-      contenidoPlanes.innerHTML = `<div class="aviso-plan">¡Gracias por tu pago! 🎉 Tu plan ya está activo.</div>`;
+      contenidoPlanes.innerHTML = `<div class="aviso-plan">¡Gracias por tu pago! 🎉 Ya tienes todas las aplicaciones desbloqueadas.</div>`;
     } catch (error) {
       contenidoPlanes.innerHTML = `<div class="aviso-plan">Recibimos tu pago. Si tu plan no aparece en unos minutos, recarga la página. (${error.message})</div>`;
     }
@@ -759,7 +765,8 @@
   async function dibujarBotonesPaypal() {
     contenidoPlanes.innerHTML = htmlPlanesOriginal;
     try {
-      const paypal = await cargarPaypal();
+      const [paypal, planes] = await Promise.all([cargarPaypal(), obtenerPlanes()]);
+      if (!/^P-/.test(planes.total || "")) throw new Error("sin plan");
       const opciones = (idPlan) => ({
         style: { shape: "pill", color: "gold", layout: "vertical", label: "subscribe" },
         createSubscription: (_datos, acciones) => acciones.subscription.create({
@@ -769,8 +776,8 @@
         onApprove: (datos) => confirmarPago(datos.subscriptionID),
         onError: () => mostrarError("Hubo un problema con PayPal. No se te cobró nada, intenta de nuevo."),
       });
-      paypal.Buttons(opciones(PLAN_PAYPAL_100)).render("#botonPlan100");
-      paypal.Buttons(opciones(PLAN_PAYPAL_200)).render("#botonPlan200");
+      paypal.Buttons(opciones(planes.total)).render("#botonPlan100");
+      if (/^P-/.test(planes.plus || "")) paypal.Buttons(opciones(planes.plus)).render("#botonPlan200");
     } catch {
       contenidoPlanes.innerHTML = `<div class="aviso-plan">No se pudieron cargar los botones de pago. Recarga la página.</div>`;
     }
@@ -813,18 +820,18 @@
       contenidoPlanes.innerHTML =
         `<div class="aviso-plan cancelada">Tu suscripción al <strong>${nombrePlan}</strong> está <strong>cancelada</strong>: ya no se te va a cobrar.<br>` +
         (fecha
-          ? `Puedes seguir usando la versión completa hasta el <strong>${fecha}</strong>.`
-          : `Puedes seguir usando la versión completa hasta que termine el mes que pagaste.`) +
+          ? `Puedes seguir usando todas las aplicaciones hasta el <strong>${fecha}</strong>.`
+          : `Puedes seguir usando todas las aplicaciones hasta que termine el mes que pagaste.`) +
         ` Después tu cuenta regresa sola a la versión gratis.</div>`;
       return;
     }
 
     contenidoPlanes.innerHTML =
-      `<div class="aviso-plan">Tienes el <strong>${nombrePlan}</strong>. ¡Gracias por tu apoyo!</div>` +
+      `<div class="aviso-plan">Tienes el <strong>${nombrePlan}</strong>: todas las aplicaciones están desbloqueadas. ¡Gracias por tu apoyo!</div>` +
       `<p class="texto-suscripcion">Tu suscripción está activa.` + (fecha ? ` Próximo cobro: <strong>${fecha}</strong>.` : "") + `</p>` +
       `<button type="button" class="boton-cancelar-sus" id="botonCancelarSus">Cancelar mi suscripción</button>` +
       `<div class="caja-confirmar" id="cajaConfirmar" hidden>` +
-        `<strong>¿Seguro que quieres cancelar?</strong> Ya no se te cobrará, y conservas la versión completa` +
+        `<strong>¿Seguro que quieres cancelar?</strong> Se cancela en todas las aplicaciones. Ya no se te cobrará, y las conservas` +
         (fecha ? ` hasta el ${fecha}.` : ` hasta que termine el mes que pagaste.`) +
         `<div id="mensajeCancelar" style="color: var(--rojo-oscuro); margin-top: 0.4rem;"></div>` +
         `<div class="fila-confirmar">` +
@@ -855,10 +862,10 @@
     estadoPlanesMostrado = estado;
     tarjetaPlanes.style.display = "block";
     document.getElementById("tituloPlanes").textContent =
-      estado.startsWith("suscrito") ? "Tu suscripción" : "¿Necesitas más audios?";
+      estado.startsWith("suscrito") ? "Tu suscripción" : "Desbloquea todas las aplicaciones";
 
     if (estado === "invitado") {
-      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
+      subtituloPlanes.textContent = "Una sola suscripción abre la versión completa del Traductor, Trazos Chinos, el Mapa del mundo en chino y las apps nuevas. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
       contenidoPlanes.innerHTML = htmlPlanesOriginal;
       ["botonPlan100", "botonPlan200"].forEach((id) => {
         const boton = document.createElement("button");
@@ -870,7 +877,7 @@
         document.getElementById(id).appendChild(boton);
       });
     } else if (estado === "gratis") {
-      subtituloPlanes.textContent = "Elige un plan. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
+      subtituloPlanes.textContent = "Una sola suscripción abre la versión completa del Traductor, Trazos Chinos, el Mapa del mundo en chino y las apps nuevas. Se cobra cada mes con PayPal o tarjeta, y puedes cancelar cuando quieras desde aquí.";
       dibujarBotonesPaypal();
     } else {
       dibujarSuscrito(datos);
